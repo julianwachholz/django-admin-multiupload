@@ -8,13 +8,13 @@ import json
 
 from django.contrib import admin
 from django.shortcuts import render, get_object_or_404
-from django.conf.urls import patterns,url
+from django.conf.urls import url
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 
 
-class MultiUploadAdmin(admin.ModelAdmin):
+class MultiUploadMixin(object):
     class Media:
         js = (
             'jquery/jquery.1.8.0.min.js',
@@ -29,10 +29,11 @@ class MultiUploadAdmin(admin.ModelAdmin):
             'jquery/jquery.fileupload-ui.js',
         )
         css = {
-            'all': ['css/jquery-ui.css',
-                    'css/jquery.fileupload-ui.css',
-                    'css/multiupload.css',
-                    ],
+            'all': [
+                'css/jquery-ui.css',
+                'css/jquery.fileupload-ui.css',
+                'css/multiupload.css',
+            ],
         }
     change_form_template = 'multiupload/change_form.html'
     change_list_template = 'multiupload/change_list.html'
@@ -43,18 +44,20 @@ class MultiUploadAdmin(admin.ModelAdmin):
     multiupload_maxfilesize = 3 * 2 ** 20  # 3 Mb
     multiupload_minfilesize = 0
     # tuple with mimetype accepted
-    multiupload_acceptedformats = ("image/jpeg",
-                                   "image/pjpeg",
-                                   "image/png", )
+    multiupload_acceptedformats = (
+        'image/jpeg',
+        'image/pjpeg',
+        'image/png',
+    )
 
     multiupload_view_context = {}
 
     @property
     def upload_options(self):
         return {
-            "maxfilesize": self.multiupload_maxfilesize,
-            "minfilesize": self.multiupload_minfilesize,
-            "acceptedformats": self.multiupload_acceptedformats,
+            'maxfilesize': self.multiupload_maxfilesize,
+            'minfilesize': self.multiupload_minfilesize,
+            'acceptedformats': self.multiupload_acceptedformats,
         }
 
     def render_change_form(self, request, context, *args, **kwargs):
@@ -65,13 +68,14 @@ class MultiUploadAdmin(admin.ModelAdmin):
             if 'object_id' in context:
                 object_id = context['object_id']
                 if object_id is not None:
+                    form_url = reverse(
+                        'admin:%s' % self.get_multiupload_form_view_name(),
+                        args=[object_id]
+                    )
                     context.update({
-                        'multiupload_form_url': reverse(
-                            'admin:%s' % self.get_multiupload_form_view_name(),
-                            args=[object_id, ]),
+                        'multiupload_form_url': form_url,
                     })
-        return super(MultiUploadAdmin, self).render_change_form(
-            request, context, *args, **kwargs)
+        return super().render_change_form(request, context, *args, **kwargs)
 
     def changelist_view(self, request, extra_context=None):
         pop = request.POST.get('pop')
@@ -80,14 +84,13 @@ class MultiUploadAdmin(admin.ModelAdmin):
             'multiupload_list': self.multiupload_list,
         })
         if self.multiupload_list:
-            url = reverse('admin:%s' % self.get_multiupload_list_view_name())
+            list_url = reverse('admin:%s' % self.get_multiupload_list_view_name())
             if pop:
-                url += '?pop=1'
+                list_url += '?pop=1'
             extra_context.update({
-                'multiupload_list_url': url,
+                'multiupload_list_url': list_url,
             })
-        return super(MultiUploadAdmin, self).changelist_view(
-            request, extra_context)
+        return super().changelist_view(request, extra_context)
 
     def get_model_name(self):
         options = self.model._meta
@@ -104,29 +107,29 @@ class MultiUploadAdmin(admin.ModelAdmin):
         return '%s_%s_multiupload_form' % (app_name, self.get_model_name())
 
     def get_urls(self, *args, **kwargs):
-        multi_urls = patterns('')
+        multi_urls = []
         if self.multiupload_list:
-            multi_urls += patterns('',
-                url(r'^multiupload/$',
-                    self.admin_site.admin_view(self.admin_upload_view),
-                    name=self.get_multiupload_list_view_name())
-            )
+            multi_urls += [url(
+                r'^multiupload/$',
+                self.admin_site.admin_view(self.admin_upload_view),
+                name=self.get_multiupload_list_view_name()
+            )]
         if self.multiupload_form:
-            multi_urls += patterns('',
-                url(r'^(?P<id>\d+)/multiupload/$',
-                    self.admin_site.admin_view(self.admin_upload_view),
-                    name=self.get_multiupload_form_view_name()),
-            )
-        return multi_urls + super(MultiUploadAdmin, self).get_urls(*args,
-                                                                   **kwargs)
+            multi_urls += [url(
+                r'^(?P<id>\d+)/multiupload/$',
+                self.admin_site.admin_view(self.admin_upload_view),
+                name=self.get_multiupload_form_view_name()
+            )]
+        return multi_urls + super().get_urls(*args, **kwargs)
 
-    def process_uploaded_file(self, uploaded, object, request):
-        '''
-        Process uploaded file
-        Parameters:
-            uploaded: File that was uploaded
-            object: parent object where multiupload is
-            request: request Object
+    def process_uploaded_file(self, uploaded, obj, request):
+        """
+        Process uploaded file.
+
+        :param uploaded: File that was uploaded.
+        :param obj: Parent object where multiupload is.
+        :param request: Request object.
+
         Must return a dict with:
         return {
             'url': 'url to download the file',
@@ -135,30 +138,27 @@ class MultiUploadAdmin(admin.ModelAdmin):
             'name': 'the name of created file',
 
             # optionals
-            "size": "filesize",
-            "type": "file content type",
-            "delete_type": "POST",
-            "error" = 'Error message or jQueryFileUpload Error code'
+            'size': 'filesize',
+            'type': 'file content type',
+            'delete_type': 'POST',
+            'error' = 'Error message or jQueryFileUpload Error code'
         }
-        '''
-        raise NotImplementedError
+        """
+        raise NotImplementedError()
 
     def delete_file(self, pk, request):
-        '''
-        Function to delete a file.
-        '''
+        """Delete a file."""
         obj = get_object_or_404(self.queryset(request), pk=pk)
         return obj.delete()
 
     @csrf_exempt
-    # @user_passes_test(lambda u: u.is_staff)
     def admin_upload_view(self, request, id=None):
         if id:
-            object = self.get_object(request, id)
+            obj = self.get_object(request, id)
         else:
-            object = None
-        if request.method == 'POST':    # POST data
-            if not ("f" in request.GET.keys()):  # upload file
+            obj = None
+        if request.method == 'POST':
+            if not ('f' in request.GET.keys()):
                 if not request.FILES:
                     return HttpResponseBadRequest('Must upload a file')
 
@@ -170,29 +170,29 @@ class MultiUploadAdmin(admin.ModelAdmin):
                     error = False
 
                     # file size
-                    if f.size > self.upload_options["maxfilesize"]:
-                        error = "maxFileSize"
-                    if f.size < self.upload_options["minfilesize"]:
-                        error = "minFileSize"
+                    if f.size > self.upload_options['maxfilesize']:
+                        error = 'maxFileSize'
+                    if f.size < self.upload_options['minfilesize']:
+                        error = 'minFileSize'
                         # allowed file type
                     if f.content_type not in \
-                            self.upload_options["acceptedformats"]:
-                        error = "acceptFileTypes"
+                            self.upload_options['acceptedformats']:
+                        error = 'acceptFileTypes'
 
                     # the response data which will be returned to
                     # the uploader as json
                     response_data = {
-                        "name": f.name,
-                        "size": f.size,
-                        "type": f.content_type,
-                        "delete_type": "POST",
+                        'name': f.name,
+                        'size': f.size,
+                        'type': f.content_type,
+                        'delete_type': 'POST',
                     }
 
                     # if there was an error, add error message
                     # to response_data and return
                     if error:
                         # append error message
-                        response_data["error"] = error
+                        response_data['error'] = error
                         # generate json
                     else:
                         while 1:
@@ -202,12 +202,12 @@ class MultiUploadAdmin(admin.ModelAdmin):
                         f.file.seek(0)
 
                         # Manipulate file.
-                        data = self.process_uploaded_file(f, object,
+                        data = self.process_uploaded_file(f, obj,
                                                           request)
 
                         assert 'id' in data, 'Must return id in data'
                         response_data.update(data)
-                        response_data['delete_url'] = request.path + "?"\
+                        response_data['delete_url'] = request.path + '?' \
                             + urlencode({'f': data['id']})
 
                     resp.append(response_data)
@@ -215,7 +215,7 @@ class MultiUploadAdmin(admin.ModelAdmin):
                 # generate the json data
                 response_data = json.dumps(resp)
                 # response type
-                content_type = "application/json"
+                content_type = 'application/json'
 
                 # QUIRK HERE
                 # in jQuey uploader, when it falls back to uploading
@@ -229,9 +229,9 @@ class MultiUploadAdmin(admin.ModelAdmin):
                 # so if the text/html is present, file was uploaded
                 # using jFrame because
                 # that value is not in the set when uploaded by XHR
-                if "text/html" in request.META["HTTP_ACCEPT"]:
-                    content_type = "text/html"
-                content_type = "text/html"
+                if 'text/html' in request.META['HTTP_ACCEPT']:
+                    content_type = 'text/html'
+                content_type = 'text/html'
 
                 # return the data to the uploading plugin
                 return HttpResponse(response_data, content_type=content_type)
@@ -244,25 +244,25 @@ class MultiUploadAdmin(admin.ModelAdmin):
                 # in this case is it a json True value
                 # if true is not returned, the file will not be
                 # removed from the upload queue
-                response_data = json.dumps(self.delete_file(request.GET.get("f"), request))
+                response_data = json.dumps(self.delete_file(request.GET.get('f'), request))
 
                 # return the result data
                 # here it always has to be json
-                return HttpResponse(response_data, content_type="application/json")
+                return HttpResponse(response_data, content_type='application/json')
 
         else:
-            #GET
+            # GET
             context = {
                 # these two are necessary to generate the jQuery templates
                 # they have to be included here since they conflict
                 #  with django template system
-                "open_tv": u'{{',
-                "close_tv": u'}}',
+                'open_tv': u'{{',
+                'close_tv': u'}}',
                 # some of the parameters to be checked by javascript
-                "maxfilesize": self.upload_options["maxfilesize"],
-                "minfilesize": self.upload_options["minfilesize"],
+                'maxfilesize': self.upload_options['maxfilesize'],
+                'minfilesize': self.upload_options['minfilesize'],
                 # django admin parameters
-                "object": object,
+                'object': obj,
                 'media': self.media,
                 'opts': self.model._meta,
                 'change': False,
@@ -276,10 +276,11 @@ class MultiUploadAdmin(admin.ModelAdmin):
             }
             context.update(self.get_upload_context())
 
-            return render(request,
-                          self.multiupload_template,
-                          context,
-                          )
+            return render(
+                request,
+                self.multiupload_template,
+                context,
+            )
 
     def get_upload_context(self):
         return self.multiupload_view_context.copy()

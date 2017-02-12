@@ -4,11 +4,11 @@
 from setuptools import setup, find_packages
 
 setup(name='admin_multiupload',
-      version='0.1',
+      version='0.1.2',
       description='Provides a interface to multi file upload for django admin.',
       author='Guilherme Kuhn',
       author_email='g.kuhn0@gmail.com',
-      url='https://github.com/gkuhn1/django-admin-multiupload',
+      url='https://github.com/julianwachholz/django-admin-multiupload',
       packages=find_packages(),
       license='GPL',
       include_package_data=True,
